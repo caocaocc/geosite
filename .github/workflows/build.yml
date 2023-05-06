@@ -1,0 +1,97 @@
+name: Build geosite.dat
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare latest tags and set variables
+        run: |
+          upstreamLatestTag=$(curl -sSL --connect-timeout 5 --retry 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/v2fly/domain-list-community/releases/latest | grep "tag_name" | cut -d\" -f4)
+          set +e
+          thisLatestTag=$(curl -sSL --connect-timeout 5 --retry 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/releases/latest | grep "tag_name" | cut -d\" -f4)
+          set -e
+          if [[ $upstreamLatestTag != $thisLatestTag ]] || [[ -z "$thisLatestTag" ]]; then
+            echo "NeedToSync=true" >> $GITHUB_ENV
+          fi
+          echo "RELEASE_NAME=$upstreamLatestTag" >> $GITHUB_ENV
+          echo "TAG_NAME=$upstreamLatestTag" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Checkout Loyalsoldier/domain-list-custom
+        uses: actions/checkout@v3
+        if: ${{ env.NeedToSync }}
+
+      - name: Setup Go
+        uses: actions/checkout@v3
+        if: ${{ env.NeedToSync }}
+        with:
+          repository: Loyalsoldier/domain-list-custom
+
+      - name: Checkout v2fly/domain-list-community
+        if: ${{ env.NeedToSync }}
+        uses: actions/checkout@v3
+        with:
+          repository: v2fly/domain-list-community
+          path: domain-list-community
+
+      - name: Append custom rules
+        if: ${{ env.NeedToSync }}
+        run: |
+          echo "regexp:^stun\\..+" >> ./domain-list-community/data/cn
+          echo "full:yacd.haishan.me" >> ./domain-list-community/data/cn
+          echo "full:yacd.metacubex.one" >> ./domain-list-community/data/cn
+          echo "ghproxy.com" >> ./domain-list-community/data/cn
+          echo "splashtop.com" >> ./domain-list-community/data/cn
+          echo "full:translate.google.com" >> ./domain-list-community/data/geolocation-\!cn
+          
+      - name: Append attribute rules
+        if: ${{ env.NeedToSync }}
+        run: |
+          echo "include:geolocation-!cn @cn" >> ./domain-list-community/data/cn
+          echo "include:geolocation-cn @!cn" >> ./domain-list-community/data/geolocation-\!cn
+
+      - name: Get dependencies and run
+        if: ${{ env.NeedToSync }}
+        run: |
+          go run ./ --datapath=./domain-list-community/data
+
+      - name: Generate sha256 hashsum
+        if: ${{ env.NeedToSync }}
+        run: |
+          cd publish || exit 1
+          sha256sum geosite.dat > geosite.dat.sha256sum
+
+      - name: Git push assets to "release" branch
+        if: ${{ env.NeedToSync }}
+        run: |
+          cd publish || exit 1
+          git init
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b release
+          git add .
+          git commit -m "${{ env.RELEASE_NAME }}"
+          git remote add publish "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git push -f publish release
+
+      - name: Release and upload assets
+        if: ${{ env.NeedToSync }}
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+          files: |
+            ./publish/geosite.dat
+            ./publish/geosite.dat.sha256sum
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
