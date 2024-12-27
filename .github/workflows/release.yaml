@@ -20,6 +20,28 @@ jobs:
         id: build
         run: |
           go run -v .
+      - name: SRS to JSON
+        run: |
+          bash <(curl -fsSL https://sing-box.app/deb-install.sh)
+          # 定义源目录
+          SOURCE_DIR="/home/runner/work/geosite/geosite"
+          SRS_SUFFIX=".srs"
+          JSON_SUFFIX=".json"
+
+          # 遍历目录中的所有 .srs 文件
+          find "$SOURCE_DIR" -type f -name "*${SRS_SUFFIX}" | while read -r SRS_FILE; do
+              # 构造目标 .json 文件路径
+              JSON_FILE="${SRS_FILE%$SRS_SUFFIX}$JSON_SUFFIX"
+
+              # 执行转换命令
+              if sing-box rule-set decompile "$SRS_FILE" -o "$JSON_FILE"; then
+                  echo "Converted: $SRS_FILE -> $JSON_FILE"
+              else
+                  echo "Error converting $SRS_FILE" >&2
+              fi
+          done
+
+          echo "Batch conversion complete."
       - name: Release rule sets
         if: steps.build.outputs.skip != 'true'
         run: .github/release-rule-set.sh
