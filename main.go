@@ -114,6 +114,11 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 					Type:  geosite.RuleTypeDomainRegex,
 					Value: domain.Value,
 				})
+			case routercommon.Domain_NoDotRootDomain:
+				domains = append(domains, geosite.Item{
+					Type:  geosite.RuleTypeNoDotDomainSuffix,
+					Value: domain.Value,
+				})	
 			case routercommon.Domain_RootDomain:
 				if strings.Contains(domain.Value, ".") {
 					domains = append(domains, geosite.Item{
@@ -147,6 +152,11 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 						Type:  geosite.RuleTypeDomainRegex,
 						Value: domain.Value,
 					})
+				case routercommon.Domain_NoDotRootDomain:
+					attributeDomains = append(attributeDomains, geosite.Item{
+						Type:  geosite.RuleTypeNoDotDomainSuffix,
+						Value: domain.Value,
+					})				
 				case routercommon.Domain_RootDomain:
 					if strings.Contains(domain.Value, ".") {
 						attributeDomains = append(attributeDomains, geosite.Item{
@@ -399,35 +409,72 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 			return err
 		}
 
-		// Generate .list file
-		listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
-		listFile, err := os.Create(listPath)
-		if err != nil {
-			return err
-		}
-		defer listFile.Close()
-
-		listWriter := bufio.NewWriter(listFile)
-		for _, domain := range domains {
-			domainValue := domain.Value
-			if strings.HasPrefix(domainValue, ".") {
-				domainValue = domainValue[1:]
-			}
-			switch domain.Type {
-			case geosite.RuleTypeDomain:
-				// Skip DOMAIN if DOMAIN-SUFFIX will cover it
-				if _, exists := defaultRule.DomainSuffix[domainValue]; exists {
-					continue
+// 遍历 domainMap，处理每个 code 的规则集
+		for code, domains := range domainMap {
+			log.Infof("Processing domain set for code: %s", code)
+		
+			// 构建 DOMAIN-SUFFIX 集合，用于检查覆盖
+			suffixSet := make(map[string]struct{})
+			for _, domain := range domains {
+				if domain.Type == geosite.RuleTypeNoDotDomainSuffix {
+					suffixSet[domain.Value] = struct{}{}
 				}
-				listWriter.WriteString("DOMAIN," + domainValue + "\n")
-			case geosite.RuleTypeDomainSuffix:
-				listWriter.WriteString("DOMAIN-SUFFIX," + domainValue + "\n")
-			case geosite.RuleTypeDomainKeyword:
-				listWriter.WriteString("DOMAIN-KEYWORD," + domainValue + "\n")
-			case geosite.RuleTypeDomainRegex:
-				listWriter.WriteString("URL-REGEX," + domainValue + "\n")
 			}
-		}
+		
+			// 去除被 DOMAIN-SUFFIX 覆盖的 DOMAIN
+			filteredDomains := []geosite.Item{}
+			for _, domain := range domains {
+				if domain.Type == geosite.RuleTypeDomain {
+					covered := false
+					for suffix := range suffixSet {
+						if strings.HasSuffix(domain.Value, suffix) {
+							covered = true
+							log.Infof("Skipping DOMAIN %s as it is covered by DOMAIN-SUFFIX %s", domain.Value, suffix)
+							break
+						}
+					}
+					if covered {
+						continue
+					}
+				}
+				filteredDomains = append(filteredDomains, domain)
+			}
+		
+			// 写入 .list 文件
+			listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+			listFile, err := os.Create(listPath)
+			if err != nil {
+				log.Errorf("Failed to create .list file for code %s: %v", code, err)
+				return err
+			}
+			defer listFile.Close()
+		
+			listWriter := bufio.NewWriter(listFile)
+			for _, domain := range filteredDomains {
+				var line string
+				switch domain.Type {
+				case geosite.RuleTypeDomain:
+					line = "DOMAIN," + domain.Value + "\n"
+				case geosite.RuleTypeNoDotDomainSuffix:
+					line = "DOMAIN-SUFFIX," + domain.Value + "\n"
+				case geosite.RuleTypeDomainKeyword:
+					line = "DOMAIN-KEYWORD," + domain.Value + "\n"
+				case geosite.RuleTypeDomainRegex:
+					line = "URL-REGEX," + domain.Value + "\n"
+				}
+		
+				if _, err := listWriter.WriteString(line); err != nil {
+					log.Errorf("Failed to write to .list file for code %s: %v", code, err)
+					return err
+				}
+			}
+		
+			if err := listWriter.Flush(); err != nil {
+				log.Errorf("Failed to flush .list file for code %s: %v", code, err)
+				return err
+			}
+		
+			log.Infof("Successfully created .list file at: %s", listPath)
 
 		err = listWriter.Flush()
 		if err != nil {
