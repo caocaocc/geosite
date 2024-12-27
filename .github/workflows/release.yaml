@@ -52,3 +52,5 @@ jobs:
             geosite-cn.db
             geosite-cn.db.sha256sum
             geosite-output.txt
+      - name: View geosite-output.txt
+        run: cat geosite-output.txt
