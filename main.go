@@ -378,7 +378,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
     defer txtFile.Close()
     txtWriter := bufio.NewWriter(txtFile)
 
-    // 遍历 domainMap，生成规则集和 txt 输出
+    // 遍历 domainMap，生成规则集、txt 文件和 Surge `.list`
     for code, domains := range domainMap {
         var headlessRule option.DefaultHeadlessRule
         defaultRule := geosite.Compile(domains)
@@ -394,7 +394,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             },
         }
 
-        // 创建规则集文件
+        // 创建规则集文件 (SRS)
         srsPath := filepath.Join(ruleSetOutput, "geosite-"+code+".srs")
         unstableSRSPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs")
         outputRuleSet, err := os.Create(srsPath)
@@ -416,21 +416,55 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             return err
         }
 
-        // 写入 txt 文件
-        _, err = txtWriter.WriteString("Code: " + code + "\n")
+        // 创建对应的 Surge `.list` 文件
+        listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+        unstableListPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list")
+        listFile, err := os.Create(listPath)
         if err != nil {
             return err
         }
+        unstableListFile, err := os.Create(unstableListPath)
+        if err != nil {
+            return err
+        }
+
+        listWriter := bufio.NewWriter(listFile)
+        unstableListWriter := bufio.NewWriter(unstableListFile)
+
+        // 写入 Surge `.list` 文件规则
         for _, domain := range domains {
-            _, err = txtWriter.WriteString(domainTypeToString(domain.Type) + ": " + domain.Value + "\n")
+            var rule string
+            switch domain.Type {
+            case geosite.RuleTypeDomain:
+                rule = "DOMAIN," + domain.Value
+            case geosite.RuleTypeDomainSuffix:
+                rule = "DOMAIN-SUFFIX," + domain.Value
+            case geosite.RuleTypeDomainKeyword:
+                rule = "DOMAIN-KEYWORD," + domain.Value
+            case geosite.RuleTypeDomainRegex:
+                rule = "URL-REGEX," + domain.Value
+            }
+            _, err = listWriter.WriteString(rule + "\n")
+            if err != nil {
+                return err
+            }
+            _, err = unstableListWriter.WriteString(rule + "\n")
             if err != nil {
                 return err
             }
         }
-        _, err = txtWriter.WriteString("\n")
+
+        // 关闭 Surge `.list` 写入器
+        err = listWriter.Flush()
         if err != nil {
             return err
         }
+        err = unstableListWriter.Flush()
+        if err != nil {
+            return err
+        }
+        listFile.Close()
+        unstableListFile.Close()
     }
 
     // 刷新 txt 文件写入器
@@ -441,6 +475,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 
     return nil
 }
+
 
 
 func setActionOutput(name string, content string) {
