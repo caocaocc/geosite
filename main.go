@@ -409,26 +409,23 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 
 		listWriter := bufio.NewWriter(listFile)
 		for _, domain := range domains {
+			domainValue := domain.Value
+			if strings.HasPrefix(domainValue, ".") {
+				domainValue = domainValue[1:]
+			}
 			switch domain.Type {
 			case geosite.RuleTypeDomain:
 				// Skip DOMAIN if DOMAIN-SUFFIX will cover it
-				if strings.HasPrefix(domain.Value, ".") {
-					domain.Value = domain.Value[1:]
-				}
-				_, exists := defaultRule.DomainSuffix[domain.Value]
-				if exists {
+				if _, exists := defaultRule.DomainSuffix[domainValue]; exists {
 					continue
 				}
-				listWriter.WriteString("DOMAIN," + domain.Value + "\n")
+				listWriter.WriteString("DOMAIN," + domainValue + "\n")
 			case geosite.RuleTypeDomainSuffix:
-				if strings.HasPrefix(domain.Value, ".") {
-					domain.Value = domain.Value[1:]
-				}
-				listWriter.WriteString("DOMAIN-SUFFIX," + domain.Value + "\n")
+				listWriter.WriteString("DOMAIN-SUFFIX," + domainValue + "\n")
 			case geosite.RuleTypeDomainKeyword:
-				listWriter.WriteString("DOMAIN-KEYWORD," + domain.Value + "\n")
+				listWriter.WriteString("DOMAIN-KEYWORD," + domainValue + "\n")
 			case geosite.RuleTypeDomainRegex:
-				listWriter.WriteString("URL-REGEX," + domain.Value + "\n")
+				listWriter.WriteString("URL-REGEX," + domainValue + "\n")
 			}
 		}
 
