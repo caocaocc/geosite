@@ -311,106 +311,32 @@ func domainTypeToString(domainType uint8) string {
 }
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string, txtOutput string) error {
-    // 下载 geosite 数据
-    vData, err := download(release)
+    vData, err := download(release) // 下载 geosite 数据
     if err != nil {
         return err
     }
 
-    // 解析 geosite 数据
-    domainMap, err := parse(vData)
+    domainMap, err := parse(vData) // 解析 geosite 数据
     if err != nil {
         return err
     }
 
-    // 过滤和合并标签
-    filterTags(domainMap)
-    mergeTags(domainMap)
+    filterTags(domainMap) // 过滤标签
+    mergeTags(domainMap)  // 合并标签
 
-    // 写入主 geosite 数据库文件
-    outputPath, _ := filepath.Abs(output)
-    os.Stderr.WriteString("write " + outputPath + "\n")
-    outputFile, err := os.Create(output)
-    if err != nil {
-        return err
-    }
-    defer outputFile.Close()
-    writer := bufio.NewWriter(outputFile)
-    err = geosite.Write(writer, domainMap)
-    if err != nil {
-        return err
-    }
-    err = writer.Flush()
-    if err != nil {
-        return err
-    }
-
-    // 写入中国相关的 geosite 数据库文件
-    cnCodes := []string{"geolocation-cn"}
-    cnDomainMap := make(map[string][]geosite.Item)
-    for _, cnCode := range cnCodes {
-        cnDomainMap[cnCode] = domainMap[cnCode]
-    }
-    cnOutputFile, err := os.Create(cnOutput)
-    if err != nil {
-        return err
-    }
-    defer cnOutputFile.Close()
-    writer.Reset(cnOutputFile)
-    err = geosite.Write(writer, cnDomainMap)
-    if err != nil {
-        return err
-    }
-    err = writer.Flush()
-    if err != nil {
-        return err
-    }
-
-    // 清理并创建规则集目录
     os.RemoveAll(ruleSetOutput)
     os.RemoveAll(ruleSetUnstableOutput)
-    err = os.MkdirAll(ruleSetOutput, 0o755)
-    if err != nil {
-        return err
-    }
-    err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
-    if err != nil {
-        return err
-    }
+    os.MkdirAll(ruleSetOutput, 0o755)
+    os.MkdirAll(ruleSetUnstableOutput, 0o755)
 
-    // 创建 txt 文件
-    txtFile, err := os.Create(txtOutput)
-    if err != nil {
-        return err
-    }
-    defer txtFile.Close()
-    txtWriter := bufio.NewWriter(txtFile)
-
-    // 遍历 domainMap，生成规则集、txt 文件和 Surge `.list`
     for code, domains := range domainMap {
-        var headlessRule option.DefaultHeadlessRule
-        defaultRule := geosite.Compile(domains)
-        headlessRule.Domain = defaultRule.Domain
-        headlessRule.DomainSuffix = defaultRule.DomainSuffix
-        headlessRule.DomainKeyword = defaultRule.DomainKeyword
-        headlessRule.DomainRegex = defaultRule.DomainRegex
-        var plainRuleSet option.PlainRuleSet
-        plainRuleSet.Rules = []option.HeadlessRule{
-            {
-                Type:           C.RuleTypeDefault,
-                DefaultOptions: headlessRule,
-            },
-        }
+        // 存储 DOMAIN-SUFFIX 的域名
+        suffixSet := make(map[string]bool)
 
-        // 创建规则集文件 (.srs)
+        // SRS 文件路径
         srsPath := filepath.Join(ruleSetOutput, "geosite-"+code+".srs")
         unstableSRSPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs")
         outputRuleSet, err := os.Create(srsPath)
-        if err != nil {
-            return err
-        }
-        err = srs.Write(outputRuleSet, plainRuleSet, false)
-        outputRuleSet.Close()
         if err != nil {
             return err
         }
@@ -418,13 +344,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
         if err != nil {
             return err
         }
-        err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
-        outputRuleSetUnstable.Close()
-        if err != nil {
-            return err
-        }
 
-        // 创建对应的 Surge `.list` 文件
         listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
         unstableListPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list")
         listFile, err := os.Create(listPath)
@@ -439,33 +359,29 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
         listWriter := bufio.NewWriter(listFile)
         unstableListWriter := bufio.NewWriter(unstableListFile)
 
-        // 用于存储已处理的 DOMAIN-SUFFIX
-        suffixSet := make(map[string]bool)
-
         // 写入 Code 信息作为注释
-        _, err = listWriter.WriteString("# Code: " + code + "\n")
+        _, err = listWriter.WriteString("# " + code + "\n")
         if err != nil {
             return err
         }
-        _, err = unstableListWriter.WriteString("# Code: " + code + "\n")
+        _, err = unstableListWriter.WriteString("# " + code + "\n")
         if err != nil {
             return err
         }
 
-        // 遍历规则并生成
         for _, domain := range domains {
             var rule string
             switch domain.Type {
+            case geosite.RuleTypeDomainSuffix:
+                suffixName := strings.TrimPrefix(domain.Value, ".") // 去掉 "."
+                suffixSet[suffixName] = true                        // 标记此域名为已处理
+                rule = "DOMAIN-SUFFIX," + suffixName
             case geosite.RuleTypeDomain:
                 domainName := domain.Value
                 if suffixSet[domainName] {
                     continue // 如果 DOMAIN 已包含在 DOMAIN-SUFFIX 中，跳过
                 }
                 rule = "DOMAIN," + domainName
-            case geosite.RuleTypeDomainSuffix:
-                suffixName := strings.TrimPrefix(domain.Value, ".") // 去掉 "."
-                suffixSet[suffixName] = true                        // 标记此域名为已处理
-                rule = "DOMAIN-SUFFIX," + suffixName
             case geosite.RuleTypeDomainKeyword:
                 rule = "DOMAIN-KEYWORD," + domain.Value
             case geosite.RuleTypeDomainRegex:
@@ -484,7 +400,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             }
         }
 
-        // 添加空行以分隔不同的 Code 块
+        // 添加空行
         _, err = listWriter.WriteString("\n")
         if err != nil {
             return err
@@ -494,28 +410,14 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             return err
         }
 
-        // 刷新并关闭 Surge `.list` 文件
-        err = listWriter.Flush()
-        if err != nil {
-            return err
-        }
-        err = unstableListWriter.Flush()
-        if err != nil {
-            return err
-        }
+        listWriter.Flush()
+        unstableListWriter.Flush()
         listFile.Close()
         unstableListFile.Close()
     }
 
-    // 刷新 txt 文件写入器
-    err = txtWriter.Flush()
-    if err != nil {
-        return err
-    }
-
     return nil
 }
-
 
 
 func setActionOutput(name string, content string) {
