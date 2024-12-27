@@ -447,7 +447,7 @@ func setActionOutput(name string, content string) {
 	os.Stdout.WriteString("::set-output name=" + name + "::" + content + "\n")
 }
 
-func release(source string, destination string, output string, cnOutput string, ruleSetOutput string, ruleSetOutputUnstable string) error {
+func release(source string, destination string, output string, cnOutput string, ruleSetOutput string, ruleSetOutputUnstable string, txtOutput string) error {
 	sourceRelease, err := fetch(source)
 	if err != nil {
 		return err
@@ -462,7 +462,7 @@ func release(source string, destination string, output string, cnOutput string, 
 			return nil
 		}
 	}
-	err = generate(sourceRelease, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable)
+	err = generate(sourceRelease, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable, txtOutput)
 	if err != nil {
 		return err
 	}
