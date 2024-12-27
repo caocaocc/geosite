@@ -295,133 +295,132 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
-func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
-	vData, err := download(release)
-	if err != nil {
-		return err
-	}
-	domainMap, err := parse(vData)
-	if err != nil {
-		return err
-	}
-	filterTags(domainMap)
-	mergeTags(domainMap)
-	outputPath, _ := filepath.Abs(output)
-	os.Stderr.WriteString("write " + outputPath + "\n")
-	outputFile, err := os.Create(output)
-	if err != nil {
-		return err
-	}
-	defer outputFile.Close()
-	writer := bufio.NewWriter(outputFile)
-	err = geosite.Write(writer, domainMap)
-	if err != nil {
-		return err
-	}
-	err = writer.Flush()
-	if err != nil {
-		return err
-	}
-	cnCodes := []string{
-		"geolocation-cn",
-	}
-	cnDomainMap := make(map[string][]geosite.Item)
-	for _, cnCode := range cnCodes {
-		cnDomainMap[cnCode] = domainMap[cnCode]
-	}
-	cnOutputFile, err := os.Create(cnOutput)
-	if err != nil {
-		return err
-	}
-	defer cnOutputFile.Close()
-	writer.Reset(cnOutputFile)
-	err = geosite.Write(writer, cnDomainMap)
-	if err != nil {
-		return err
-	}
-	err = writer.Flush()
-	if err != nil {
-		return err
-	}
-	os.RemoveAll(ruleSetOutput)
-	os.RemoveAll(ruleSetUnstableOutput)
-	err = os.MkdirAll(ruleSetOutput, 0o755)
-	err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
-	if err != nil {
-		return err
-	}
-	
-	// 生成每个代码的规则集
-	txtFile, err := os.Create(txtOutput) // 创建 txt 输出文件
-	if err != nil {
-		return err
-	}
-	defer txtFile.Close()
-	txtWriter := bufio.NewWriter(txtFile) // 创建缓冲写入器
-	
-	for code, domains := range domainMap {
-		var headlessRule option.DefaultHeadlessRule
-		defaultRule := geosite.Compile(domains)
-		headlessRule.Domain = defaultRule.Domain
-		headlessRule.DomainSuffix = defaultRule.DomainSuffix
-		headlessRule.DomainKeyword = defaultRule.DomainKeyword
-		headlessRule.DomainRegex = defaultRule.DomainRegex
-		var plainRuleSet option.PlainRuleSet
-		plainRuleSet.Rules = []option.HeadlessRule{
-			{
-				Type:           C.RuleTypeDefault,
-				DefaultOptions: headlessRule,
-			},
-		}
-		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
-		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
-		// os.Stderr.WriteString("write " + srsPath + "\n")
-		var (
-			outputRuleSet         *os.File
-			outputRuleSetUnstable *os.File
-		)
-		outputRuleSet, err = os.Create(srsPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSet, plainRuleSet, false)
-		outputRuleSet.Close()
-		if err != nil {
-			return err
-		}
-		outputRuleSetUnstable, err = os.Create(unstableSRSPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
-		outputRuleSetUnstable.Close()
-		if err != nil {
-			return err
-		}
-		
-		// 写入到 txt 文件
-		_, err = txtWriter.WriteString("Code: " + code + "\n")
-		if err != nil {
-			return err
-		}
-		for _, domain := range domains {
-			_, err = txtWriter.WriteString(domain.Type.String() + ": " + domain.Value + "\n")
-			if err != nil {
-				return err
-			}
-		}
-		_, err = txtWriter.WriteString("\n")
-		if err != nil {
-			return err
-		}
-		
-	}
-	err = txtWriter.Flush() // 刷新 txt 写入器
-	if err != nil {
-		return err
-	}
-	return nil
+func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string, txtOutput string) error {
+    vData, err := download(release) // 下载 geosite 数据
+    if err != nil {
+        return err
+    }
+    domainMap, err := parse(vData) // 解析 geosite 数据
+    if err != nil {
+        return err
+    }
+    filterTags(domainMap) // 过滤标签
+    mergeTags(domainMap)  // 合并标签
+
+    // 写入主 geosite 数据库文件
+    outputPath, _ := filepath.Abs(output)
+    os.Stderr.WriteString("write " + outputPath + "\n")
+    outputFile, err := os.Create(output)
+    if err != nil {
+        return err
+    }
+    defer outputFile.Close()
+    writer := bufio.NewWriter(outputFile)
+    err = geosite.Write(writer, domainMap)
+    if err != nil {
+        return err
+    }
+    err = writer.Flush()
+    if err != nil {
+        return err
+    }
+
+    // 写入中国相关的 geosite 数据库文件
+    cnCodes := []string{"geolocation-cn"}
+    cnDomainMap := make(map[string][]geosite.Item)
+    for _, cnCode := range cnCodes {
+        cnDomainMap[cnCode] = domainMap[cnCode]
+    }
+    cnOutputFile, err := os.Create(cnOutput)
+    if err != nil {
+        return err
+    }
+    defer cnOutputFile.Close()
+    writer.Reset(cnOutputFile)
+    err = geosite.Write(writer, cnDomainMap)
+    if err != nil {
+        return err
+    }
+    err = writer.Flush()
+    if err != nil {
+        return err
+    }
+
+    // 清理并创建规则集目录
+    os.RemoveAll(ruleSetOutput)
+    os.RemoveAll(ruleSetUnstableOutput)
+    err = os.MkdirAll(ruleSetOutput, 0o755)
+    err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
+    if err != nil {
+        return err
+    }
+
+    // 生成每个代码的规则集
+    txtFile, err := os.Create(txtOutput) // 创建 txt 输出文件
+    if err != nil {
+        return err
+    }
+    defer txtFile.Close()
+    txtWriter := bufio.NewWriter(txtFile) // 创建缓冲写入器
+
+    for code, domains := range domainMap {
+        var headlessRule option.DefaultHeadlessRule
+        defaultRule := geosite.Compile(domains)
+        headlessRule.Domain = defaultRule.Domain
+        headlessRule.DomainSuffix = defaultRule.DomainSuffix
+        headlessRule.DomainKeyword = defaultRule.DomainKeyword
+        headlessRule.DomainRegex = defaultRule.DomainRegex
+        var plainRuleSet option.PlainRuleSet
+        plainRuleSet.Rules = []option.HeadlessRule{
+            {
+                Type:           C.RuleTypeDefault,
+                DefaultOptions: headlessRule,
+            },
+        }
+        srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
+        unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
+        outputRuleSet, err := os.Create(srsPath)
+        if err != nil {
+            return err
+        }
+        err = srs.Write(outputRuleSet, plainRuleSet, false)
+        outputRuleSet.Close()
+        if err != nil {
+            return err
+        }
+        outputRuleSetUnstable, err = os.Create(unstableSRSPath)
+        if err != nil {
+            return err
+        }
+        err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
+        outputRuleSetUnstable.Close()
+        if err != nil {
+            return err
+        }
+
+        // 写入到 txt 文件
+        _, err = txtWriter.WriteString("Code: " + code + "\n")
+        if err != nil {
+            return err
+        }
+        for _, domain := range domains {
+            _, err = txtWriter.WriteString(domainTypeToString(domain.Type) + ": " + domain.Value + "\n")
+            if err != nil {
+                return err
+            }
+        }
+        _, err = txtWriter.WriteString("\n")
+        if err != nil {
+            return err
+        }
+    }
+    err = txtWriter.Flush() // 刷新 txt 写入器
+    if err != nil {
+        return err
+    }
+    return nil
 }
+
 
 func setActionOutput(name string, content string) {
 	os.Stdout.WriteString("::set-output name=" + name + "::" + content + "\n")
