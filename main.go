@@ -295,6 +295,21 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
+func domainTypeToString(domainType uint8) string {
+    switch domainType {
+    case geosite.RuleTypeDomain:
+        return "Domain"
+    case geosite.RuleTypeDomainKeyword:
+        return "DomainKeyword"
+    case geosite.RuleTypeDomainRegex:
+        return "DomainRegex"
+    case geosite.RuleTypeDomainSuffix:
+        return "DomainSuffix"
+    default:
+        return "Unknown"
+    }
+}
+
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string, txtOutput string) error {
     vData, err := download(release) // 下载 geosite 数据
     if err != nil {
@@ -355,14 +370,15 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
         return err
     }
 
-    // 生成每个代码的规则集
-    txtFile, err := os.Create(txtOutput) // 创建 txt 输出文件
+    // 创建 txt 文件
+    txtFile, err := os.Create(txtOutput)
     if err != nil {
         return err
     }
     defer txtFile.Close()
-    txtWriter := bufio.NewWriter(txtFile) // 创建缓冲写入器
+    txtWriter := bufio.NewWriter(txtFile)
 
+    // 遍历 domainMap，生成规则集和 txt 输出
     for code, domains := range domainMap {
         var headlessRule option.DefaultHeadlessRule
         defaultRule := geosite.Compile(domains)
@@ -377,8 +393,10 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
                 DefaultOptions: headlessRule,
             },
         }
-        srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
-        unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
+
+        // 创建规则集文件
+        srsPath := filepath.Join(ruleSetOutput, "geosite-"+code+".srs")
+        unstableSRSPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs")
         outputRuleSet, err := os.Create(srsPath)
         if err != nil {
             return err
@@ -388,7 +406,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
         if err != nil {
             return err
         }
-        outputRuleSetUnstable, err = os.Create(unstableSRSPath)
+        outputRuleSetUnstable, err := os.Create(unstableSRSPath)
         if err != nil {
             return err
         }
@@ -398,7 +416,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             return err
         }
 
-        // 写入到 txt 文件
+        // 写入 txt 文件
         _, err = txtWriter.WriteString("Code: " + code + "\n")
         if err != nil {
             return err
@@ -414,10 +432,13 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             return err
         }
     }
-    err = txtWriter.Flush() // 刷新 txt 写入器
+
+    // 刷新 txt 文件写入器
+    err = txtWriter.Flush()
     if err != nil {
         return err
     }
+
     return nil
 }
 
@@ -457,6 +478,7 @@ func main() {
 		"geosite-cn.db",
 		"rule-set",
 		"rule-set-unstable",
+		"geosite-output.txt",
 	)
 	if err != nil {
 		log.Fatal(err)
