@@ -305,20 +305,32 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
-func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
+func generate(
+	release *github.RepositoryRelease,
+	output string,
+	cnOutput string,
+	ruleSetOutput string,
+	ruleSetUnstableOutput string,
+) error {
+	// 下载并解析 geosite 数据
 	vData, err := download(release)
 	if err != nil {
 		return err
 	}
+
 	domainMap, err := parse(vData)
 	if err != nil {
 		return err
 	}
+
+	// 过滤和合并标签
 	filterTags(domainMap)
 	mergeTags(domainMap)
 
+	// 写入 geosite.db 文件
 	outputPath, _ := filepath.Abs(output)
 	os.Stderr.WriteString("write " + outputPath + "\n")
+
 	outputFile, err := os.Create(output)
 	if err != nil {
 		return err
@@ -326,19 +338,17 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	defer outputFile.Close()
 
 	writer := bufio.NewWriter(outputFile)
-	err = geosite.Write(writer, domainMap)
-	if err != nil {
+	if err = geosite.Write(writer, domainMap); err != nil {
 		return err
 	}
-	err = writer.Flush()
-	if err != nil {
+	if err = writer.Flush(); err != nil {
 		return err
 	}
 
-	cnCodes := []string{
-		"geolocation-cn",
-	}
+	// 写入 geosite-cn.db 文件
+	cnCodes := []string{"geolocation-cn"}
 	cnDomainMap := make(map[string][]geosite.Item)
+
 	for _, cnCode := range cnCodes {
 		cnDomainMap[cnCode] = domainMap[cnCode]
 	}
@@ -350,140 +360,95 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	defer cnOutputFile.Close()
 
 	writer.Reset(cnOutputFile)
-	err = geosite.Write(writer, cnDomainMap)
-	if err != nil {
+	if err = geosite.Write(writer, cnDomainMap); err != nil {
 		return err
 	}
-	err = writer.Flush()
-	if err != nil {
+	if err = writer.Flush(); err != nil {
 		return err
 	}
 
+	// 清理并创建规则集输出目录
 	os.RemoveAll(ruleSetOutput)
 	os.RemoveAll(ruleSetUnstableOutput)
-	err = os.MkdirAll(ruleSetOutput, 0o755)
-	err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
-	if err != nil {
+
+	if err = os.MkdirAll(ruleSetOutput, 0o755); err != nil {
+		return err
+	}
+	if err = os.MkdirAll(ruleSetUnstableOutput, 0o755); err != nil {
 		return err
 	}
 
+	// 遍历 domainMap，处理每个 code 的规则集
 	for code, domains := range domainMap {
-		var headlessRule option.DefaultHeadlessRule
-		defaultRule := geosite.Compile(domains)
-		headlessRule.Domain = defaultRule.Domain
-		headlessRule.DomainSuffix = defaultRule.DomainSuffix
-		headlessRule.DomainKeyword = defaultRule.DomainKeyword
-		headlessRule.DomainRegex = defaultRule.DomainRegex
-		var plainRuleSet option.PlainRuleSet
-		plainRuleSet.Rules = []option.HeadlessRule{
-			{
-				Type:           C.RuleTypeDefault,
-				DefaultOptions: headlessRule,
-			},
-		}
+		log.Infof("Processing domain set for code: %s", code)
 
-		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
-		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
-
-		var (
-			outputRuleSet         *os.File
-			outputRuleSetUnstable *os.File
-		)
-		outputRuleSet, err = os.Create(srsPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSet, plainRuleSet, false)
-		outputRuleSet.Close()
-		if err != nil {
-			return err
-		}
-
-		outputRuleSetUnstable, err = os.Create(unstableSRSPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
-		outputRuleSetUnstable.Close()
-		if err != nil {
-			return err
-		}
-
-// 遍历 domainMap，处理每个 code 的规则集
-		for code, domains := range domainMap {
-			log.Infof("Processing domain set for code: %s", code)
-		
-			// 构建 DOMAIN-SUFFIX 集合，用于检查覆盖
-			suffixSet := make(map[string]struct{})
-			for _, domain := range domains {
-				if domain.Type == geosite.RuleTypeNoDotDomainSuffix {
-					suffixSet[domain.Value] = struct{}{}
-				}
+		// 构建 DOMAIN-SUFFIX 集合，用于检查覆盖
+		suffixSet := make(map[string]struct{})
+		for _, domain := range domains {
+			if domain.Type == geosite.RuleTypeNoDotDomainSuffix {
+				suffixSet[domain.Value] = struct{}{}
 			}
-		
-			// 去除被 DOMAIN-SUFFIX 覆盖的 DOMAIN
-			filteredDomains := []geosite.Item{}
-			for _, domain := range domains {
-				if domain.Type == geosite.RuleTypeDomain {
-					covered := false
-					for suffix := range suffixSet {
-						if strings.HasSuffix(domain.Value, suffix) {
-							covered = true
-							log.Infof("Skipping DOMAIN %s as it is covered by DOMAIN-SUFFIX %s", domain.Value, suffix)
-							break
-						}
-					}
-					if covered {
-						continue
+		}
+
+		// 去除被 DOMAIN-SUFFIX 覆盖的 DOMAIN
+		filteredDomains := []geosite.Item{}
+		for _, domain := range domains {
+			if domain.Type == geosite.RuleTypeDomain {
+				covered := false
+				for suffix := range suffixSet {
+					if strings.HasSuffix(domain.Value, suffix) {
+						covered = true
+						log.Infof("Skipping DOMAIN %s as it is covered by DOMAIN-SUFFIX %s", domain.Value, suffix)
+						break
 					}
 				}
-				filteredDomains = append(filteredDomains, domain)
-			}
-		
-			// 写入 .list 文件
-			listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
-			listFile, err := os.Create(listPath)
-			if err != nil {
-				log.Errorf("Failed to create .list file for code %s: %v", code, err)
-				return err
-			}
-			defer listFile.Close()
-		
-			listWriter := bufio.NewWriter(listFile)
-			for _, domain := range filteredDomains {
-				var line string
-				switch domain.Type {
-				case geosite.RuleTypeDomain:
-					line = "DOMAIN," + domain.Value + "\n"
-				case geosite.RuleTypeNoDotDomainSuffix:
-					line = "DOMAIN-SUFFIX," + domain.Value + "\n"
-				case geosite.RuleTypeDomainKeyword:
-					line = "DOMAIN-KEYWORD," + domain.Value + "\n"
-				case geosite.RuleTypeDomainRegex:
-					line = "URL-REGEX," + domain.Value + "\n"
-				}
-		
-				if _, err := listWriter.WriteString(line); err != nil {
-					log.Errorf("Failed to write to .list file for code %s: %v", code, err)
-					return err
+				if covered {
+					continue
 				}
 			}
-		
-			if err := listWriter.Flush(); err != nil {
-				log.Errorf("Failed to flush .list file for code %s: %v", code, err)
-				return err
-			}
-		
-			log.Infof("Successfully created .list file at: %s", listPath)
+			filteredDomains = append(filteredDomains, domain)
+		}
 
-		err = listWriter.Flush()
+		// 写入 .list 文件
+		listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+		listFile, err := os.Create(listPath)
 		if err != nil {
+			log.Errorf("Failed to create .list file for code %s: %v", code, err)
 			return err
 		}
+		defer listFile.Close()
+
+		listWriter := bufio.NewWriter(listFile)
+		for _, domain := range filteredDomains {
+			var line string
+			switch domain.Type {
+			case geosite.RuleTypeDomain:
+				line = "DOMAIN," + domain.Value + "\n"
+			case geosite.RuleTypeNoDotDomainSuffix:
+				line = "DOMAIN-SUFFIX," + domain.Value + "\n"
+			case geosite.RuleTypeDomainKeyword:
+				line = "DOMAIN-KEYWORD," + domain.Value + "\n"
+			case geosite.RuleTypeDomainRegex:
+				line = "URL-REGEX," + domain.Value + "\n"
+			}
+
+			if _, err := listWriter.WriteString(line); err != nil {
+				log.Errorf("Failed to write to .list file for code %s: %v", code, err)
+				return err
+			}
+		}
+
+		if err := listWriter.Flush(); err != nil {
+			log.Errorf("Failed to flush .list file for code %s: %v", code, err)
+			return err
+		}
+
+		log.Infof("Successfully created .list file at: %s", listPath)
 	}
 
 	return nil
 }
+
 
 func setActionOutput(name string, content string) {
 	os.Stdout.WriteString("::set-output name=" + name + "::" + content + "\n")
