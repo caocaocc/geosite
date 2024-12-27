@@ -311,16 +311,21 @@ func domainTypeToString(domainType uint8) string {
 }
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string, txtOutput string) error {
-    vData, err := download(release) // 下载 geosite 数据
+    // 下载 geosite 数据
+    vData, err := download(release)
     if err != nil {
         return err
     }
-    domainMap, err := parse(vData) // 解析 geosite 数据
+
+    // 解析 geosite 数据
+    domainMap, err := parse(vData)
     if err != nil {
         return err
     }
-    filterTags(domainMap) // 过滤标签
-    mergeTags(domainMap)  // 合并标签
+
+    // 过滤和合并标签
+    filterTags(domainMap)
+    mergeTags(domainMap)
 
     // 写入主 geosite 数据库文件
     outputPath, _ := filepath.Abs(output)
@@ -365,6 +370,9 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
     os.RemoveAll(ruleSetOutput)
     os.RemoveAll(ruleSetUnstableOutput)
     err = os.MkdirAll(ruleSetOutput, 0o755)
+    if err != nil {
+        return err
+    }
     err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
     if err != nil {
         return err
@@ -394,7 +402,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
             },
         }
 
-        // 创建规则集文件 (SRS)
+        // 创建规则集文件 (.srs)
         srsPath := filepath.Join(ruleSetOutput, "geosite-"+code+".srs")
         unstableSRSPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs")
         outputRuleSet, err := os.Create(srsPath)
@@ -431,30 +439,62 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
         listWriter := bufio.NewWriter(listFile)
         unstableListWriter := bufio.NewWriter(unstableListFile)
 
-        // 写入 Surge `.list` 文件规则
+        // 用于存储已处理的 DOMAIN-SUFFIX
+        suffixSet := make(map[string]bool)
+
+        // 写入 Code 信息作为注释
+        _, err = listWriter.WriteString("# Code: " + code + "\n")
+        if err != nil {
+            return err
+        }
+        _, err = unstableListWriter.WriteString("# Code: " + code + "\n")
+        if err != nil {
+            return err
+        }
+
+        // 遍历规则并生成
         for _, domain := range domains {
             var rule string
             switch domain.Type {
             case geosite.RuleTypeDomain:
-                rule = "DOMAIN," + domain.Value
+                domainName := domain.Value
+                if suffixSet[domainName] {
+                    continue // 如果 DOMAIN 已包含在 DOMAIN-SUFFIX 中，跳过
+                }
+                rule = "DOMAIN," + domainName
             case geosite.RuleTypeDomainSuffix:
-                rule = "DOMAIN-SUFFIX," + domain.Value
+                suffixName := strings.TrimPrefix(domain.Value, ".") // 去掉 "."
+                suffixSet[suffixName] = true                        // 标记此域名为已处理
+                rule = "DOMAIN-SUFFIX," + suffixName
             case geosite.RuleTypeDomainKeyword:
                 rule = "DOMAIN-KEYWORD," + domain.Value
             case geosite.RuleTypeDomainRegex:
                 rule = "URL-REGEX," + domain.Value
             }
-            _, err = listWriter.WriteString(rule + "\n")
-            if err != nil {
-                return err
-            }
-            _, err = unstableListWriter.WriteString(rule + "\n")
-            if err != nil {
-                return err
+
+            if rule != "" {
+                _, err = listWriter.WriteString(rule + "\n")
+                if err != nil {
+                    return err
+                }
+                _, err = unstableListWriter.WriteString(rule + "\n")
+                if err != nil {
+                    return err
+                }
             }
         }
 
-        // 关闭 Surge `.list` 写入器
+        // 添加空行以分隔不同的 Code 块
+        _, err = listWriter.WriteString("\n")
+        if err != nil {
+            return err
+        }
+        _, err = unstableListWriter.WriteString("\n")
+        if err != nil {
+            return err
+        }
+
+        // 刷新并关闭 Surge `.list` 文件
         err = listWriter.Flush()
         if err != nil {
             return err
