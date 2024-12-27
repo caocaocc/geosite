@@ -51,3 +51,4 @@ jobs:
             geosite.db.sha256sum
             geosite-cn.db
             geosite-cn.db.sha256sum
+            geosite-output.txt
