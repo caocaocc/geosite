@@ -350,6 +350,15 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	if err != nil {
 		return err
 	}
+	
+	// 生成每个代码的规则集
+	txtFile, err := os.Create(txtOutput) // 创建 txt 输出文件
+	if err != nil {
+		return err
+	}
+	defer txtFile.Close()
+	txtWriter := bufio.NewWriter(txtFile) // 创建缓冲写入器
+	
 	for code, domains := range domainMap {
 		var headlessRule option.DefaultHeadlessRule
 		defaultRule := geosite.Compile(domains)
@@ -389,6 +398,27 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		if err != nil {
 			return err
 		}
+		
+		// 写入到 txt 文件
+		_, err = txtWriter.WriteString("Code: " + code + "\n")
+		if err != nil {
+			return err
+		}
+		for _, domain := range domains {
+			_, err = txtWriter.WriteString(domain.Type.String() + ": " + domain.Value + "\n")
+			if err != nil {
+				return err
+			}
+		}
+		_, err = txtWriter.WriteString("\n")
+		if err != nil {
+			return err
+		}
+		
+	}
+	err = txtWriter.Flush() // 刷新 txt 写入器
+	if err != nil {
+		return err
 	}
 	return nil
 }
