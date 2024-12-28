@@ -284,11 +284,11 @@ func mergeTags(data map[string][]geosite.Item) {
 }
 
 type listItem struct {
-    ruleType int
+    ruleType uint8
     value    string
 }
 
-var ruleTypeOrder = map[int]int{
+var ruleTypeOrder = map[uint8]int{
     geosite.RuleTypeDomain:        0,
     geosite.RuleTypeDomainSuffix:  1,
     geosite.RuleTypeDomainKeyword: 2,
