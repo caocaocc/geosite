@@ -20,7 +20,7 @@ jobs:
         id: build
         run: |
           go run -v .
-      - name: Build geosite
+      - name: Install sing-box and mihomo
         run: |
             set -e -o pipefail
             
