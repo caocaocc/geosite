@@ -284,8 +284,15 @@ func mergeTags(data map[string][]geosite.Item) {
 }
 
 type listItem struct {
-    ruleType geosite.RuleType
+    ruleType int
     value    string
+}
+
+var ruleTypeOrder = map[int]int{
+    geosite.RuleTypeDomain:        0,
+    geosite.RuleTypeDomainSuffix:  1,
+    geosite.RuleTypeDomainKeyword: 2,
+    geosite.RuleTypeDomainRegex:   3,
 }
 
 func generateListFile(path string, domains []geosite.Item) error {
@@ -310,7 +317,7 @@ func generateListFile(path string, domains []geosite.Item) error {
 
     sort.Slice(items, func(i, j int) bool {
         if items[i].ruleType != items[j].ruleType {
-            return items[i].ruleType < items[j].ruleType
+            return ruleTypeOrder[items[i].ruleType] < ruleTypeOrder[items[j].ruleType]
         }
         return items[i].value < items[j].value
     })
