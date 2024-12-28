@@ -283,6 +283,11 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
+type listItem struct {
+    ruleType geosite.RuleType
+    value    string
+}
+
 func generateListFile(path string, domains []geosite.Item) error {
     file, err := os.Create(path)
     if err != nil {
@@ -290,25 +295,41 @@ func generateListFile(path string, domains []geosite.Item) error {
     }
     defer file.Close()
     writer := bufio.NewWriter(file)
+
+    items := make([]listItem, 0, len(domains))
     for _, item := range domains {
-        var line string
         switch item.Type {
-        case geosite.RuleTypeDomain:
-            line = "DOMAIN," + item.Value + "\n"
-        case geosite.RuleTypeDomainSuffix:
-            line = "DOMAIN-SUFFIX," + item.Value + "\n"
-        case geosite.RuleTypeDomainKeyword:
-            line = "DOMAIN-KEYWORD," + item.Value + "\n"
+        case geosite.RuleTypeDomain, geosite.RuleTypeDomainSuffix, geosite.RuleTypeDomainKeyword:
+            items = append(items, listItem{item.Type, item.Value})
         case geosite.RuleTypeDomainRegex:
             if wildcard := regexToWildcard(item.Value); wildcard != "" {
-                line = "DOMAIN-WILDCARD," + wildcard + "\n"
+                items = append(items, listItem{item.Type, wildcard})
             }
         }
-        if line != "" {
-            _, err := writer.WriteString(line)
-            if err != nil {
-                return err
-            }
+    }
+
+    sort.Slice(items, func(i, j int) bool {
+        if items[i].ruleType != items[j].ruleType {
+            return items[i].ruleType < items[j].ruleType
+        }
+        return items[i].value < items[j].value
+    })
+
+    for _, item := range items {
+        var line string
+        switch item.ruleType {
+        case geosite.RuleTypeDomain:
+            line = "DOMAIN," + item.value + "\n"
+        case geosite.RuleTypeDomainSuffix:
+            line = "DOMAIN-SUFFIX," + item.value + "\n"
+        case geosite.RuleTypeDomainKeyword:
+            line = "DOMAIN-KEYWORD," + item.value + "\n"
+        case geosite.RuleTypeDomainRegex:
+            line = "DOMAIN-WILDCARD," + item.value + "\n"
+        }
+        _, err := writer.WriteString(line)
+        if err != nil {
+            return err
         }
     }
     return writer.Flush()
