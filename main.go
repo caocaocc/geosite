@@ -295,13 +295,20 @@ var ruleTypeOrder = map[uint8]int{
     geosite.RuleTypeDomainRegex:   3,
 }
 
-func generateListFile(path string, domains []geosite.Item) error {
-    file, err := os.Create(path)
+func generateListFiles(stablePath, unstablePath string, domains []geosite.Item) error {
+    stableFile, err := os.Create(stablePath)
     if err != nil {
         return err
     }
-    defer file.Close()
-    writer := bufio.NewWriter(file)
+    defer stableFile.Close()
+    stableWriter := bufio.NewWriter(stableFile)
+
+    unstableFile, err := os.Create(unstablePath)
+    if err != nil {
+        return err
+    }
+    defer unstableFile.Close()
+    unstableWriter := bufio.NewWriter(unstableFile)
 
     items := make([]listItem, 0, len(domains))
     for _, item := range domains {
@@ -334,12 +341,30 @@ func generateListFile(path string, domains []geosite.Item) error {
         case geosite.RuleTypeDomainRegex:
             line = "DOMAIN-WILDCARD," + item.value + "\n"
         }
-        _, err := writer.WriteString(line)
+
+        // Write to unstable file (includes all rules)
+        _, err := unstableWriter.WriteString(line)
         if err != nil {
             return err
         }
+
+        // Write to stable file (excludes DOMAIN-WILDCARD rules)
+        if item.ruleType != geosite.RuleTypeDomainRegex {
+            _, err := stableWriter.WriteString(line)
+            if err != nil {
+                return err
+            }
+        }
     }
-    return writer.Flush()
+
+    if err := stableWriter.Flush(); err != nil {
+        return err
+    }
+    if err := unstableWriter.Flush(); err != nil {
+        return err
+    }
+
+    return nil
 }
 
 func regexToWildcard(regex string) string {
@@ -449,6 +474,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
 		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
 		listPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".list"))
+		unstableListPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list"))
 		// os.Stderr.WriteString("write " + srsPath + "\n")
 		var (
 			outputRuleSet         *os.File
@@ -473,7 +499,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 			return err
 		}
 		// Generate .list file
-		err = generateListFile(listPath, domains)
+		err := generateListFiles(listPath, unstableListPath, domains)
 		if err != nil {
 			return err
 		}
