@@ -332,8 +332,7 @@ func generateListFile(path string, domains []geosite.Item) error {
         case geosite.RuleTypeDomainKeyword:
             line = "DOMAIN-KEYWORD," + item.value + "\n"
         case geosite.RuleTypeDomainRegex:
-                wildcard := regexToWildcard(item.Value)
-                line = "DOMAIN-WILDCARD," + wildcard + "\n"
+            line = "DOMAIN-WILDCARD," + item.value + "\n"
         }
         _, err := writer.WriteString(line)
         if err != nil {
@@ -351,8 +350,8 @@ func regexToWildcard(regex string) string {
     // Replace character classes and quantifiers
     regex = strings.ReplaceAll(regex, "[\\w.-]", "?")
     regex = strings.ReplaceAll(regex, "[\\w.-]*?", "*")
-    regex = strings.ReplaceAll(regex, "[\w.-]", "?")
-    regex = strings.ReplaceAll(regex, "[\w.-]*?", "*")
+    regex = strings.ReplaceAll(regex, `[\w.-]`, "?")
+    regex = strings.ReplaceAll(regex, `[\w.-]*?`, "*")
 
     // Replace remaining quantifiers
     regex = strings.ReplaceAll(regex, "*?", "*")
