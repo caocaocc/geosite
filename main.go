@@ -369,7 +369,7 @@ func generateFiles(code string, domains []geosite.Item, ruleSetOutput string, ru
 	}
 
 	// Generate LIST file
-	err = generateLISTFile(code, domains, ruleSetOutput)
+	err = generateLISTFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
 	if err != nil {
 		return err
 	}
