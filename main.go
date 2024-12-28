@@ -481,38 +481,54 @@ func generateTXTFile(code string, domains []geosite.Item, ruleSetOutput string, 
 	return nil
 }
 
-func generateLISTFile(code string, domains []geosite.Item, ruleSetOutput string) error {
-	listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+func generateLISTFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+    listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+    unstableListPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list")
 
-	listFile, err := os.Create(listPath)
-	if err != nil {
-		return err
-	}
-	defer listFile.Close()
-	listWriter := bufio.NewWriter(listFile)
+    listFile, err := os.Create(listPath)
+    if err != nil {
+        return err
+    }
+    defer listFile.Close()
+    listWriter := bufio.NewWriter(listFile)
 
-	for _, domain := range domains {
-		var line string
-		switch domain.Type {
-		case geosite.RuleTypeDomain:
-			line = "DOMAIN," + domain.Value + "\n"
-		case geosite.RuleTypeDomainSuffix:
-			line = "DOMAIN-SUFFIX," + domain.Value + "\n"
-		default:
-			continue
-		}
-		_, err = listWriter.WriteString(line)
-		if err != nil {
-			return err
-		}
-	}
+    unstableListFile, err := os.Create(unstableListPath)
+    if err != nil {
+        return err
+    }
+    defer unstableListFile.Close()
+    unstableListWriter := bufio.NewWriter(unstableListFile)
 
-	err = listWriter.Flush()
-	if err != nil {
-		return err
-	}
+    for _, domain := range domains {
+        var line string
+        switch domain.Type {
+        case geosite.RuleTypeDomain:
+            line = "DOMAIN," + domain.Value + "\n"
+        case geosite.RuleTypeDomainSuffix:
+            line = "DOMAIN-SUFFIX," + domain.Value + "\n"
+        default:
+            continue
+        }
+        _, err = listWriter.WriteString(line)
+        if err != nil {
+            return err
+        }
+        _, err = unstableListWriter.WriteString(line)
+        if err != nil {
+            return err
+        }
+    }
 
-	return nil
+    err = listWriter.Flush()
+    if err != nil {
+        return err
+    }
+    err = unstableListWriter.Flush()
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
 func generateYAMLFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
