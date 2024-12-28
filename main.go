@@ -283,28 +283,25 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
-func generateListFile(filePath string, domains []geosite.Item) error {
-    file, err := os.Create(filePath)
+func generateListFile(path string, domains []geosite.Item) error {
+    file, err := os.Create(path)
     if err != nil {
         return err
     }
     defer file.Close()
-
     writer := bufio.NewWriter(file)
-
     for _, item := range domains {
         var line string
         switch item.Type {
         case geosite.RuleTypeDomain:
-            line = fmt.Sprintf("DOMAIN,%s\n", item.Value)
+            line = "DOMAIN," + item.Value + "\n"
         case geosite.RuleTypeDomainSuffix:
-            line = fmt.Sprintf("DOMAIN-SUFFIX,%s\n", item.Value)
+            line = "DOMAIN-SUFFIX," + item.Value + "\n"
         case geosite.RuleTypeDomainKeyword:
-            line = fmt.Sprintf("DOMAIN-KEYWORD,%s\n", item.Value)
+            line = "DOMAIN-KEYWORD," + item.Value + "\n"
         case geosite.RuleTypeDomainRegex:
-            // Convert regex to wildcard if possible, otherwise skip
             if wildcard := regexToWildcard(item.Value); wildcard != "" {
-                line = fmt.Sprintf("DOMAIN-WILDCARD,%s\n", wildcard)
+                line = "DOMAIN-WILDCARD," + wildcard + "\n"
             }
         }
         if line != "" {
@@ -314,12 +311,10 @@ func generateListFile(filePath string, domains []geosite.Item) error {
             }
         }
     }
-
     return writer.Flush()
 }
 
 func regexToWildcard(regex string) string {
-    // This is a simplified conversion and may not cover all cases
     wildcard := strings.ReplaceAll(regex, "\\.", ".")
     wildcard = strings.ReplaceAll(wildcard, ".*", "*")
     if strings.HasPrefix(wildcard, "^") {
@@ -328,9 +323,8 @@ func regexToWildcard(regex string) string {
     if strings.HasSuffix(wildcard, "$") {
         wildcard = wildcard[:len(wildcard)-1]
     }
-    // Check if the conversion is valid
     if strings.ContainsAny(wildcard, "^$()[]{}|+?\\") {
-        return "" // Return empty string if the regex can't be simply converted
+        return ""
     }
     return wildcard
 }
@@ -429,16 +423,12 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		if err != nil {
 			return err
 		}
+		// Generate .list file
+		err = generateListFile(listPath, domains)
+		if err != nil {
+			return err
+		}
 	}
-
-        // Add new code for .list file generation
-       for code, domains := range domainMap {
-	    listPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".list"))
-            err = generateListFile(listPath, domains)
-            if err != nil {
-                return err
-            }
-        }
 	return nil
 }
 
