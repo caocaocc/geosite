@@ -108,7 +108,6 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 		attributes := make(map[string][]*routercommon.Domain)
 
 		for _, domain := range vGeositeEntry.Domain {
-			// 如果有 attribute，就记录
 			if len(domain.Attribute) > 0 {
 				for _, attribute := range domain.Attribute {
 					attributes[attribute.Key] = append(attributes[attribute.Key], domain)
@@ -146,7 +145,7 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 		}
 		domainMap[code] = common.Uniq(domains)
 
-		// 对每个 attribute，再生成 code+"@"+attr
+		// attribute 变成 code+"@"+attr
 		for attr, attrDomains := range attributes {
 			attributeDomains := make([]geosite.Item, 0, len(attrDomains)*2)
 			for _, domain := range attrDomains {
@@ -309,10 +308,8 @@ func mergeTags(data map[string][]geosite.Item) {
 	println("merged cn categories: " + strings.Join(cnCodeList, ","))
 }
 
-// ------------------------------ 去重逻辑：去掉 DOMAIN 与 DOMAIN-SUFFIX 的重复 ------------------------------
+// ------------------------------ 去重逻辑：去掉与 DOMAIN-SUFFIX 重复的 DOMAIN ------------------------------
 
-// deduplicateSuffix 遍历同一 code 下的所有 geosite.Item，
-// 当发现存在 DOMAIN-SUFFIX,xxx 时，就把 DOMAIN,xxx 去掉。
 func deduplicateSuffix(items []geosite.Item) []geosite.Item {
 	suffixSet := make(map[string]bool)
 	for _, it := range items {
@@ -327,7 +324,7 @@ func deduplicateSuffix(items []geosite.Item) []geosite.Item {
 		if it.Type == geosite.RuleTypeDomain {
 			val := strings.TrimPrefix(it.Value, ".")
 			if suffixSet[val] {
-				// 如果已经有 DOMAIN-SUFFIX,val，则去掉 DOMAIN,val
+				// 已被 DOMAIN-SUFFIX,val 覆盖，跳过
 				continue
 			}
 		}
@@ -336,9 +333,35 @@ func deduplicateSuffix(items []geosite.Item) []geosite.Item {
 	return newItems
 }
 
+// ------------------------------ 排序逻辑： DOMAIN < DOMAIN-SUFFIX < DOMAIN-KEYWORD < DOMAIN-REGEX ------------------------------
+
+func sortGeositeItems(items []geosite.Item) []geosite.Item {
+	// 自定义优先级
+	orderMap := map[int]int{
+		geosite.RuleTypeDomain:        1,
+		geosite.RuleTypeDomainSuffix:  2,
+		geosite.RuleTypeDomainKeyword: 3,
+		geosite.RuleTypeDomainRegex:   4,
+	}
+	sorted := make([]geosite.Item, len(items))
+	copy(sorted, items)
+
+	sort.Slice(sorted, func(i, j int) bool {
+		// 根据类型先排序
+		ti := orderMap[sorted[i].Type]
+		tj := orderMap[sorted[j].Type]
+		if ti != tj {
+			return ti < tj
+		}
+		// 如果同类型，则按 Value 字母顺序
+		return sorted[i].Value < sorted[j].Value
+	})
+
+	return sorted
+}
+
 // ------------------------------ 额外三种格式（.list/.yml/.txt）的转换 ------------------------------
 
-// List 格式：假设类似 Surge 的写法，DOMAIN-SUFFIX,apple.com
 func convertListRule(item geosite.Item, _ string) (string, bool) {
 	switch item.Type {
 	case geosite.RuleTypeDomainSuffix:
@@ -355,7 +378,6 @@ func convertListRule(item geosite.Item, _ string) (string, bool) {
 	return "", false
 }
 
-// YAML 格式：假设类似 Clash 的写法，DOMAIN-SUFFIX,apple.com,Proxy
 func convertYamlRule(item geosite.Item, policy string) (string, bool) {
 	switch item.Type {
 	case geosite.RuleTypeDomainSuffix:
@@ -372,13 +394,12 @@ func convertYamlRule(item geosite.Item, policy string) (string, bool) {
 	return "", false
 }
 
-// TXT 格式：按照原来带 . 的逻辑输出
 func convertTxtRule(item geosite.Item, _ string) (string, bool) {
 	switch item.Type {
 	case geosite.RuleTypeDomainSuffix:
-		return item.Value, true // 例如 ".apple.com"
+		return item.Value, true
 	case geosite.RuleTypeDomain:
-		return item.Value, true // 例如 "apple.com"（如果有 '.' 开头就保留）
+		return item.Value, true
 	case geosite.RuleTypeDomainKeyword:
 		return item.Value, true
 	case geosite.RuleTypeDomainRegex:
@@ -433,12 +454,17 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	filterTags(domainMap)
 	mergeTags(domainMap)
 
-	// 4. 去重：去除 "DOMAIN,xxx" 与 "DOMAIN-SUFFIX,xxx" 重复
+	// 4. 去重
 	for code, items := range domainMap {
 		domainMap[code] = deduplicateSuffix(items)
 	}
 
-	// 5. 写 geosite.db
+	// 5. 排序（DOMAIN -> DOMAIN-SUFFIX -> DOMAIN-KEYWORD -> DOMAIN-REGEX）
+	for code, items := range domainMap {
+		domainMap[code] = sortGeositeItems(items)
+	}
+
+	// 6. 写 geosite.db
 	outputPath, _ := filepath.Abs(output)
 	os.Stderr.WriteString("write " + outputPath + "\n")
 	outputFile, err := os.Create(output)
@@ -456,7 +482,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		return err
 	}
 
-	// 6. 写 geosite-cn.db
+	// 7. 写 geosite-cn.db
 	cnCodes := []string{"geolocation-cn"}
 	cnDomainMap := make(map[string][]geosite.Item)
 	for _, cnCode := range cnCodes {
@@ -477,7 +503,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		return err
 	}
 
-	// 7. 清理 + 创建 ruleSetOutput / ruleSetUnstableOutput
+	// 8. 清理 + 创建 ruleSetOutput / ruleSetUnstableOutput
 	os.RemoveAll(ruleSetOutput)
 	os.RemoveAll(ruleSetUnstableOutput)
 	err = os.MkdirAll(ruleSetOutput, 0o755)
@@ -489,7 +515,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		return err
 	}
 
-	// 8. 写 .srs 文件
+	// 9. 写 .srs 文件
 	for code, domains := range domainMap {
 		var headlessRule option.DefaultHeadlessRule
 		defaultRule := geosite.Compile(domains)
@@ -530,12 +556,11 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		}
 	}
 
-	// 9. 额外写出三种格式 (.list, .yml, .txt)
+	// 10. 额外写出三种格式 (.list, .yml, .txt)
 	if err := writeRules(domainMap, ruleSetOutput, ".list", "", convertListRule); err != nil {
 		return err
 	}
-	// 这里 policy 用 "Proxy" 只是示例，亦可用 "" 或其他值
-	if err := writeRules(domainMap, ruleSetOutput, ".yml", "Proxy", convertYamlRule); err != nil {
+	if err := writeRules(domainMap, ruleSetOutput, ".yml", "", convertYamlRule); err != nil {
 		return err
 	}
 	if err := writeRules(domainMap, ruleSetOutput, ".txt", "", convertTxtRule); err != nil {
