@@ -295,6 +295,45 @@ var ruleTypeOrder = map[uint8]int{
     geosite.RuleTypeDomainRegex:   3,
 }
 
+func generateTxtFile(path string, domains []geosite.Item) error {
+    file, err := os.Create(path)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+    writer := bufio.NewWriter(file)
+
+    items := make([]listItem, 0, len(domains))
+    for _, item := range domains {
+        switch item.Type {
+        case geosite.RuleTypeDomain, geosite.RuleTypeDomainSuffix:
+            items = append(items, listItem{item.Type, item.Value})
+        }
+    }
+
+    sort.Slice(items, func(i, j int) bool {
+        if items[i].ruleType != items[j].ruleType {
+            return ruleTypeOrder[items[i].ruleType] < ruleTypeOrder[items[j].ruleType]
+        }
+        return items[i].value < items[j].value
+    })
+
+    for _, item := range items {
+        var line string
+        switch item.ruleType {
+        case geosite.RuleTypeDomain:
+            line = item.value + "\n"
+        case geosite.RuleTypeDomainSuffix:
+            line = "+." + item.value + "\n"
+        }
+        _, err := writer.WriteString(line)
+        if err != nil {
+            return err
+        }
+    }
+    return writer.Flush()
+}
+
 func generateListFiles(stablePath, unstablePath string, domains []geosite.Item) error {
     stableFile, err := os.Create(stablePath)
     if err != nil {
@@ -475,6 +514,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
 		listPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".list"))
 		unstableListPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list"))
+		txtPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".txt"))
 		// os.Stderr.WriteString("write " + srsPath + "\n")
 		var (
 			outputRuleSet         *os.File
@@ -502,6 +542,9 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		err := generateListFiles(listPath, unstableListPath, domains)
 		if err != nil {
 			return err
+		}
+		err = generateTxtFile(txtPath, domains)
+			if err != nil {
 		}
 	}
 	return nil
