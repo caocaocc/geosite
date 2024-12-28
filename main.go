@@ -332,7 +332,8 @@ func generateListFile(path string, domains []geosite.Item) error {
         case geosite.RuleTypeDomainKeyword:
             line = "DOMAIN-KEYWORD," + item.value + "\n"
         case geosite.RuleTypeDomainRegex:
-            line = "DOMAIN-WILDCARD," + item.value + "\n"
+                wildcard := regexToWildcard(item.Value)
+                line = "DOMAIN-WILDCARD," + wildcard + "\n"
         }
         _, err := writer.WriteString(line)
         if err != nil {
@@ -343,18 +344,38 @@ func generateListFile(path string, domains []geosite.Item) error {
 }
 
 func regexToWildcard(regex string) string {
-    wildcard := strings.ReplaceAll(regex, "\\.", ".")
-    wildcard = strings.ReplaceAll(wildcard, ".*", "*")
-    if strings.HasPrefix(wildcard, "^") {
-        wildcard = wildcard[1:]
+    // Remove start and end anchors
+    regex = strings.TrimPrefix(regex, "^")
+    regex = strings.TrimSuffix(regex, "$")
+
+    // Replace character classes and quantifiers
+    regex = strings.ReplaceAll(regex, "[\\w.-]", "?")
+    regex = strings.ReplaceAll(regex, "[\\w.-]*?", "*")
+    regex = strings.ReplaceAll(regex, "[\w.-]", "?")
+    regex = strings.ReplaceAll(regex, "[\w.-]*?", "*")
+
+    // Replace remaining quantifiers
+    regex = strings.ReplaceAll(regex, "*?", "*")
+    regex = strings.ReplaceAll(regex, "+?", "*")
+
+    // Escape dots that are not part of wildcards
+    var result strings.Builder
+    for i := 0; i < len(regex); i++ {
+        if regex[i] == '.' {
+            if i > 0 && regex[i-1] == '\\' {
+                result.WriteByte('.')
+            } else {
+                result.WriteString("\\.")
+            }
+        } else if regex[i] == '\\' {
+            // Skip backslashes
+            continue
+        } else {
+            result.WriteByte(regex[i])
+        }
     }
-    if strings.HasSuffix(wildcard, "$") {
-        wildcard = wildcard[:len(wildcard)-1]
-    }
-    if strings.ContainsAny(wildcard, "^$()[]{}|+?\\") {
-        return ""
-    }
-    return wildcard
+
+    return result.String()
 }
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
