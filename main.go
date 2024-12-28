@@ -400,6 +400,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		}
 		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
 		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
+		listPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".list"))
 		// os.Stderr.WriteString("write " + srsPath + "\n")
 		var (
 			outputRuleSet         *os.File
