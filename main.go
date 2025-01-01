@@ -380,6 +380,12 @@ func generateFiles(code string, domains []geosite.Item, ruleSetOutput string, ru
 		return err
 	}
 
+	// Generate SNIPPET file
+	err = generateSNIPPETFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -590,6 +596,56 @@ func generateYAMLFile(code string, domains []geosite.Item, ruleSetOutput string,
 		return err
 	}
 	err = unstableYAMLWriter.Flush()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func generateSNIPPETFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	snippetPath := filepath.Join(ruleSetOutput, "geosite-"+code+".snippet")
+	unstableSnippetPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".snippet")
+
+	snippetFile, err := os.Create(snippetPath)
+	if err != nil {
+		return err
+	}
+	defer snippetFile.Close()
+	snippetWriter := bufio.NewWriter(snippetFile)
+
+	unstableSnippetFile, err := os.Create(unstableSnippetPath)
+	if err != nil {
+		return err
+	}
+	defer unstableSnippetFile.Close()
+	unstableSnippetWriter := bufio.NewWriter(unstableSnippetFile)
+
+	for _, domain := range domains {
+		var line string
+		switch domain.Type {
+		case geosite.RuleTypeDomain:
+			line = "host, " + domain.Value + "\n"
+		case geosite.RuleTypeDomainSuffix:
+			line = "host-suffix, " + domain.Value + "\n"
+		default:
+			continue
+		}
+		_, err = snippetWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+		_, err = unstableSnippetWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = snippetWriter.Flush()
+	if err != nil {
+		return err
+	}
+	err = unstableSnippetWriter.Flush()
 	if err != nil {
 		return err
 	}
