@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain_suffix": [
+        "00cdn.com",
+        "88cdn.com",
+        "p2cdn.com",
+        "sandai.net",
+        "thundercdn.com",
+        "thunderurl.com",
+        "xunlei.com",
+        "xycdn.com",
+        "xycloud.com"
+      ]
+    }
+  ]
+}

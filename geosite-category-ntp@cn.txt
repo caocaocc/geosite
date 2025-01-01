@@ -1,0 +1,8 @@
+time.izatcloud.net
+time.xtracloud.net
++.cn.pool.ntp.org
++.ntp.neu.edu.cn
++.ntp.ntsc.ac.cn
++.ntp.org.cn
+^ntp([1-5])?\.tencent\.com$
+^ntp([1-7])?\.aliyun\.com$
