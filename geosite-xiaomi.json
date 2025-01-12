@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain_suffix": [
+        "a.market.xiaomi.com",
+        "ad.intl.xiaomi.com",
+        "ad.mi.com",
+        "ad.xiaomi.com",
+        "ad1.xiaomi.com",
+        "admob.xiaomi.com",
+        "adv.sec.intl.miui.com",
+        "adv.sec.miui.com",
+        "c.mi.com",
+        "duokan.com",
+        "global.market.xiaomi.com",
+        "mi-img.com",
+        "mi.com",
+        "mifile.cn",
+        "migames.com",
+        "mijia.tech",
+        "misc.in.duokanbox.com",
+        "mistat.xiaomi.com",
+        "miui.com",
+        "miwifi.com",
+        "saxyit.com",
+        "sentry.d.mi.com",
+        "sentry.d.xiaomi.net",
+        "tjqonline.cn",
+        "tracker.ai.xiaomi.com",
+        "tracking.miui.com",
+        "xiaomi.cn",
+        "xiaomi.com",
+        "xiaomi.net",
+        "xiaomiev.com",
+        "xiaomimobile.com",
+        "xiaomixiaoai.com",
+        "xiaomiyoupin.com",
+        "zmifi.com"
+      ]
+    }
+  ]
+}
