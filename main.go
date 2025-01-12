@@ -60,10 +60,10 @@ func get(downloadURL *string) ([]byte, error) {
 
 func download(release *github.RepositoryRelease) ([]byte, error) {
 	geositeAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "dlc.dat"
+		return *it.Name == "geosite.dat"
 	})
 	geositeChecksumAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "dlc.dat.sha256sum"
+		return *it.Name == "geosite.dat.sha256sum"
 	})
 	if geositeAsset == nil {
 		return nil, E.New("geosite asset not found in upstream release ", release.Name)
@@ -115,15 +115,9 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 					Value: domain.Value,
 				})
 			case routercommon.Domain_RootDomain:
-				if strings.Contains(domain.Value, ".") {
-					domains = append(domains, geosite.Item{
-						Type:  geosite.RuleTypeDomain,
-						Value: domain.Value,
-					})
-				}
 				domains = append(domains, geosite.Item{
 					Type:  geosite.RuleTypeDomainSuffix,
-					Value: "." + domain.Value,
+					Value: domain.Value,
 				})
 			case routercommon.Domain_Full:
 				domains = append(domains, geosite.Item{
@@ -148,15 +142,9 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 						Value: domain.Value,
 					})
 				case routercommon.Domain_RootDomain:
-					if strings.Contains(domain.Value, ".") {
-						attributeDomains = append(attributeDomains, geosite.Item{
-							Type:  geosite.RuleTypeDomain,
-							Value: domain.Value,
-						})
-					}
 					attributeDomains = append(attributeDomains, geosite.Item{
 						Type:  geosite.RuleTypeDomainSuffix,
-						Value: "." + domain.Value,
+						Value: domain.Value,
 					})
 				case routercommon.Domain_Full:
 					attributeDomains = append(attributeDomains, geosite.Item{
@@ -292,7 +280,7 @@ func mergeTags(data map[string][]geosite.Item) {
 		Type:  geosite.RuleTypeDomainSuffix,
 		Value: "cn",
 	})
-	println("merged cn categories: " + strings.Join(cnCodeList, ","))
+	os.Stderr.WriteString("merged cn categories: " + strings.Join(cnCodeList, ",") + "\n")
 }
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
@@ -351,45 +339,317 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		return err
 	}
 	for code, domains := range domainMap {
-		var headlessRule option.DefaultHeadlessRule
-		defaultRule := geosite.Compile(domains)
-		headlessRule.Domain = defaultRule.Domain
-		headlessRule.DomainSuffix = defaultRule.DomainSuffix
-		headlessRule.DomainKeyword = defaultRule.DomainKeyword
-		headlessRule.DomainRegex = defaultRule.DomainRegex
-		var plainRuleSet option.PlainRuleSet
-		plainRuleSet.Rules = []option.HeadlessRule{
-			{
-				Type:           C.RuleTypeDefault,
-				DefaultOptions: headlessRule,
-			},
-		}
-		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
-		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
-		// os.Stderr.WriteString("write " + srsPath + "\n")
-		var (
-			outputRuleSet         *os.File
-			outputRuleSetUnstable *os.File
-		)
-		outputRuleSet, err = os.Create(srsPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSet, plainRuleSet, false)
-		outputRuleSet.Close()
-		if err != nil {
-			return err
-		}
-		outputRuleSetUnstable, err = os.Create(unstableSRSPath)
-		if err != nil {
-			return err
-		}
-		err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
-		outputRuleSetUnstable.Close()
+		err = generateFiles(code, domains, ruleSetOutput, ruleSetUnstableOutput)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func generateFiles(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	// Sort domains
+	sort.Slice(domains, func(i, j int) bool {
+		if domains[i].Type != domains[j].Type {
+			return domains[i].Type < domains[j].Type
+		}
+		return domains[i].Value < domains[j].Value
+	})
+
+	// Generate SRS file
+	err := generateSRSFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
+	// Generate TXT file
+	err = generateTXTFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
+	// Generate LIST file
+	err = generateLISTFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
+	// Generate YAML file
+	err = generateYAMLFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
+	// Generate SNIPPET file
+	err = generateSNIPPETFile(code, domains, ruleSetOutput, ruleSetUnstableOutput)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func generateSRSFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	var headlessRule option.DefaultHeadlessRule
+	defaultRule := geosite.Compile(domains)
+	headlessRule.Domain = defaultRule.Domain
+	headlessRule.DomainSuffix = defaultRule.DomainSuffix
+	headlessRule.DomainKeyword = defaultRule.DomainKeyword
+	headlessRule.DomainRegex = defaultRule.DomainRegex
+	var plainRuleSet option.PlainRuleSet
+	plainRuleSet.Rules = []option.HeadlessRule{
+		{
+			Type:           C.RuleTypeDefault,
+			DefaultOptions: headlessRule,
+		},
+	}
+
+	srsPath := filepath.Join(ruleSetOutput, "geosite-"+code+".srs")
+	unstableSRSPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs")
+
+	outputRuleSet, err := os.Create(srsPath)
+	if err != nil {
+		return err
+	}
+	defer outputRuleSet.Close()
+	err = srs.Write(outputRuleSet, plainRuleSet, false)
+	if err != nil {
+		return err
+	}
+
+	outputRuleSetUnstable, err := os.Create(unstableSRSPath)
+	if err != nil {
+		return err
+	}
+	defer outputRuleSetUnstable.Close()
+	err = srs.Write(outputRuleSetUnstable, plainRuleSet, true)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func generateTXTFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	txtPath := filepath.Join(ruleSetOutput, "geosite-"+code+".txt")
+	unstableTXTPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".txt")
+
+	txtFile, err := os.Create(txtPath)
+	if err != nil {
+		return err
+	}
+	defer txtFile.Close()
+	txtWriter := bufio.NewWriter(txtFile)
+
+	unstableTXTFile, err := os.Create(unstableTXTPath)
+	if err != nil {
+		return err
+	}
+	defer unstableTXTFile.Close()
+	unstableTXTWriter := bufio.NewWriter(unstableTXTFile)
+
+	for _, domain := range domains {
+		var line string
+		switch domain.Type {
+		case geosite.RuleTypeDomain:
+			line = domain.Value + "\n"
+		case geosite.RuleTypeDomainSuffix:
+			line = "+." + domain.Value + "\n"
+		case geosite.RuleTypeDomainRegex:
+			// Only write to unstable file
+			_, err = unstableTXTWriter.WriteString(domain.Value + "\n")
+			if err != nil {
+				return err
+			}
+			continue
+		default:
+			continue
+		}
+		_, err = txtWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+		_, err = unstableTXTWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = txtWriter.Flush()
+	if err != nil {
+		return err
+	}
+	err = unstableTXTWriter.Flush()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func generateLISTFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+    listPath := filepath.Join(ruleSetOutput, "geosite-"+code+".list")
+    unstableListPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".list")
+
+    listFile, err := os.Create(listPath)
+    if err != nil {
+        return err
+    }
+    defer listFile.Close()
+    listWriter := bufio.NewWriter(listFile)
+
+    unstableListFile, err := os.Create(unstableListPath)
+    if err != nil {
+        return err
+    }
+    defer unstableListFile.Close()
+    unstableListWriter := bufio.NewWriter(unstableListFile)
+
+    for _, domain := range domains {
+        var line string
+        switch domain.Type {
+        case geosite.RuleTypeDomain:
+            line = "DOMAIN," + domain.Value + "\n"
+        case geosite.RuleTypeDomainSuffix:
+            line = "DOMAIN-SUFFIX," + domain.Value + "\n"
+        default:
+            continue
+        }
+        _, err = listWriter.WriteString(line)
+        if err != nil {
+            return err
+        }
+        _, err = unstableListWriter.WriteString(line)
+        if err != nil {
+            return err
+        }
+    }
+
+    err = listWriter.Flush()
+    if err != nil {
+        return err
+    }
+    err = unstableListWriter.Flush()
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func generateYAMLFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	yamlPath := filepath.Join(ruleSetOutput, "geosite-"+code+".yaml")
+	unstableYAMLPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".yaml")
+
+	yamlFile, err := os.Create(yamlPath)
+	if err != nil {
+		return err
+	}
+	defer yamlFile.Close()
+	yamlWriter := bufio.NewWriter(yamlFile)
+
+	unstableYAMLFile, err := os.Create(unstableYAMLPath)
+	if err != nil {
+		return err
+	}
+	defer unstableYAMLFile.Close()
+	unstableYAMLWriter := bufio.NewWriter(unstableYAMLFile)
+
+	_, err = yamlWriter.WriteString("payload:\n")
+	if err != nil {
+		return err
+	}
+	_, err = unstableYAMLWriter.WriteString("payload:\n")
+	if err != nil {
+		return err
+	}
+
+	for _, domain := range domains {
+		var line string
+		switch domain.Type {
+		case geosite.RuleTypeDomain:
+			line = "  - '" + domain.Value + "'\n"
+		case geosite.RuleTypeDomainSuffix:
+			line = "  - '+." + domain.Value + "'\n"
+		case geosite.RuleTypeDomainRegex:
+			// Only write to unstable file
+			_, err = unstableYAMLWriter.WriteString("  - '" + domain.Value + "'\n")
+			if err != nil {
+				return err
+			}
+			continue
+		default:
+			continue
+		}
+		_, err = yamlWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+		_, err = unstableYAMLWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = yamlWriter.Flush()
+	if err != nil {
+		return err
+	}
+	err = unstableYAMLWriter.Flush()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func generateSNIPPETFile(code string, domains []geosite.Item, ruleSetOutput string, ruleSetUnstableOutput string) error {
+	snippetPath := filepath.Join(ruleSetOutput, "geosite-"+code+".snippet")
+	unstableSnippetPath := filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".snippet")
+
+	snippetFile, err := os.Create(snippetPath)
+	if err != nil {
+		return err
+	}
+	defer snippetFile.Close()
+	snippetWriter := bufio.NewWriter(snippetFile)
+
+	unstableSnippetFile, err := os.Create(unstableSnippetPath)
+	if err != nil {
+		return err
+	}
+	defer unstableSnippetFile.Close()
+	unstableSnippetWriter := bufio.NewWriter(unstableSnippetFile)
+
+	for _, domain := range domains {
+		var line string
+		switch domain.Type {
+		case geosite.RuleTypeDomain:
+			line = "host, " + domain.Value + "\n"
+		case geosite.RuleTypeDomainSuffix:
+			line = "host-suffix, " + domain.Value + "\n"
+		default:
+			continue
+		}
+		_, err = snippetWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+		_, err = unstableSnippetWriter.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = snippetWriter.Flush()
+	if err != nil {
+		return err
+	}
+	err = unstableSnippetWriter.Flush()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -422,8 +682,8 @@ func release(source string, destination string, output string, cnOutput string, 
 
 func main() {
 	err := release(
-		"v2fly/domain-list-community",
-		"sagernet/sing-geosite",
+		"caocaocc/domain-list-custom",
+		"caocaocc/geosite",
 		"geosite.db",
 		"geosite-cn.db",
 		"rule-set",
