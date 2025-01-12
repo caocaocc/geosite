@@ -1,0 +1,7 @@
++.customercontrolpanel.de
++.netcup-news.de
++.netcup-sonderangebote.de
++.netcup.com
++.netcup.de
++.netcup.eu
++.netcup.net
