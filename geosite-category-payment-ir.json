@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain_suffix": [
+        "asanpardakht.com",
+        "asanpardakht.net",
+        "behpardakht.com",
+        "iranicard.ir",
+        "mydigipay.com",
+        "pay.ir",
+        "payping.ir",
+        "pec.ir",
+        "pep.co.ir",
+        "sadadpsp.ir",
+        "sep.ir",
+        "shaparak.ir",
+        "weswap.digital",
+        "zarinpal.com"
+      ]
+    }
+  ]
+}
