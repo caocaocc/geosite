@@ -625,9 +625,9 @@ func generateSNIPPETFile(code string, domains []geosite.Item, ruleSetOutput stri
 		var line string
 		switch domain.Type {
 		case geosite.RuleTypeDomain:
-			line = "host, " + domain.Value + "\n"
+			line = "host, " + domain.Value + ", proxy" + "\n"
 		case geosite.RuleTypeDomainSuffix:
-			line = "host-suffix, " + domain.Value + "\n"
+			line = "host-suffix, " + domain.Value + ", proxy" + "\n"
 		default:
 			continue
 		}
