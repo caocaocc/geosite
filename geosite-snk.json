@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "domain_suffix": [
+        "snk-corp.co.jp",
+        "snkplaymore.info"
+      ]
+    }
+  ]
+}

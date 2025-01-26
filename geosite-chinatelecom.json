@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "domain_suffix": [
+        "189.cn",
+        "chinatelecom-h.com",
+        "chinatelecom.com.cn",
+        "chinatelecomglobal.com",
+        "chinatelecomhk.com",
+        "chntel.com",
+        "ctexcel.ca",
+        "ctexcel.com",
+        "ctexcel.com.hk",
+        "ctexcel.fr",
+        "ctexcel.us"
+      ]
+    }
+  ]
+}
