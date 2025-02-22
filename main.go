@@ -263,7 +263,7 @@ func mergeTags(data map[string][]geosite.Item) {
 		cnCodeList = append(cnCodeList, code)
 	}
 	newMap := make(map[geosite.Item]bool)
-	for _, item := range data["geolocation-cn"] {
+	for _, item := range data["cn"] {
 		newMap[item] = true
 	}
 	for _, code := range cnCodeList {
@@ -275,7 +275,7 @@ func mergeTags(data map[string][]geosite.Item) {
 	for item := range newMap {
 		newList = append(newList, item)
 	}
-	data["geolocation-cn"] = newList
+	data["cn"] = newList
 	data["cn"] = append(newList, geosite.Item{
 		Type:  geosite.RuleTypeDomainSuffix,
 		Value: "cn",
@@ -311,7 +311,7 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		return err
 	}
 	cnCodes := []string{
-		"geolocation-cn",
+		"cn",
 	}
 	cnDomainMap := make(map[string][]geosite.Item)
 	for _, cnCode := range cnCodes {
