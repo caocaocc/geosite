@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain_suffix": [
+        "114blog.com",
+        "4thworkshop.cn",
+        "4thworkshop.com",
+        "huangyuhui.net",
+        "mryys.cn",
+        "mryys.com"
+      ]
+    }
+  ]
+}
