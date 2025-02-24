@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "domain": "cueme-api.quark.cn",
+      "domain_suffix": [
+        "baichuan-ai.com",
+        "botvip.cn",
+        "chatglm.cn",
+        "cueme.cn",
+        "deepseek.com",
+        "doubao.com",
+        "hailuoai.com",
+        "hunyuan.tencent.com",
+        "liblib.art",
+        "marscode.cn",
+        "minimaxi.com",
+        "moonshot.cn",
+        "qianwen.aliyun.com",
+        "rwkv.cn",
+        "rwkv.com",
+        "tiangong.cn",
+        "tongyi.aliyun.com",
+        "xinghuo.xfyun.cn",
+        "xingyeai.com",
+        "yiyan.baidu.com",
+        "zhipuai.cn"
+      ]
+    }
+  ]
+}
