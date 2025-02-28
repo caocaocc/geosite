@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "domain_suffix": [
+        "cibntv.net",
+        "kumiao.com",
+        "mmstat.com",
+        "soku.com",
+        "ykimg.com",
+        "youku.com"
+      ]
+    }
+  ]
+}

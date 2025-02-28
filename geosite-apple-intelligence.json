@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "domain": [
+        "apple-relay.apple.com",
+        "apple-relay.mask.apple-dns.net"
+      ]
+    }
+  ]
+}
