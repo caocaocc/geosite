@@ -1,0 +1,6 @@
++.chinauos.com
++.deepin.cn
++.deepin.com
++.deepin.io
++.deepin.org
++.uniontech.com

@@ -1,0 +1,2 @@
+^cdn\d-epicgames-\d+\.file\.myqcloud\.com$
+^epicgames-download\d-\d+\.file\.myqcloud\.com$

@@ -1,0 +1,2 @@
+payload:
+  - '^speed\.(coe|open)\.ad\.[a-z]{2,6}\.prod\.hosts\.ooklaserver\.net$'

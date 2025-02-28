@@ -1,0 +1,2 @@
+payload:
+  - '^(.+\.)*zh\.okaapps\.com$'

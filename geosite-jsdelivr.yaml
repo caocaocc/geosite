@@ -1,0 +1,5 @@
+payload:
+  - 'cdn.jsdelivr.net'
+  - '+.esm.run'
+  - '+.jsdelivr.com'
+  - '+.jsdelivr.net'
